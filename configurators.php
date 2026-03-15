@@ -2,23 +2,71 @@
 
 require_once "connections.php";
 
-$GLOBALS["ACTIVE_DB"] = null;
-$GLOBALS["CURRENT_MENU"] = "INIT";
+function load_config()
+{
+    if(!file_exists("config.json")) return null;
 
-$config = load_config();
+    return json_decode(file_get_contents("config.json"),true);
+}
 
-if (!$config) {
+function save_config($cfg)
+{
+    file_put_contents("config.json",json_encode($cfg,JSON_PRETTY_PRINT));
+}
 
-    $GLOBALS["LAST_INFO"] = "Server not configured";
+function test_connection($cfg)
+{
+    try{
 
-} else {
+        $dsn="mysql:host=".$cfg["host"].";port=".$cfg["port"];
 
-    if (test_connection($config)) {
+        new PDO($dsn,$cfg["user"],$cfg["password"]);
 
-        $GLOBALS["LAST_INFO"] = "Server ready";
+        return true;
 
-    } else {
+    }catch(Exception $e){
 
-        $GLOBALS["LAST_INFO"] = "Connection failed";
+        $GLOBALS["LAST_INFO"]=$e->getMessage();
+
+        return false;
     }
+}
+
+function db()
+{
+    static $pdo;
+
+    if($pdo) return $pdo;
+
+    $cfg=load_config();
+
+    if(!$cfg) return null;
+
+    try{
+
+        $dsn="mysql:host=".$cfg["host"].";port=".$cfg["port"];
+
+        $pdo=new PDO($dsn,$cfg["user"],$cfg["password"]);
+
+        $pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
+
+    }catch(Exception $e){
+
+        $GLOBALS["LAST_INFO"]=$e->getMessage();
+
+        return null;
+    }
+
+    return $pdo;
+}
+
+function db_with_database()
+{
+    $cfg=load_config();
+
+    if(!$GLOBALS["ACTIVE_DB"]) return null;
+
+    $dsn="mysql:host=".$cfg["host"].";dbname=".$GLOBALS["ACTIVE_DB"].";port=".$cfg["port"];
+
+    return new PDO($dsn,$cfg["user"],$cfg["password"]);
 }
