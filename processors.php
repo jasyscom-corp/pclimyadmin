@@ -2,351 +2,248 @@
 
 require_once "connections.php";
 
-function set_info($msg){
-$GLOBALS["LAST_INFO"]=$msg;
-}
+$GLOBALS["ACTIVE_DB"] = null;
+$GLOBALS["CURRENT_MENU"] = "INIT";
 
-function draw_header(){
+$config = load_config();
 
-system("clear");
+if (!$config) {
 
-$cfg=load_config();
+    $GLOBALS["LAST_INFO"] = "Server not configured";
 
-echo "================================================\n";
-echo "          PCLIAMYADMIN BY JASYSCOM\n";
-echo "================================================\n";
+} else {
 
-if($cfg){
-echo "SERVER: ".$cfg["host"].":".$cfg["port"]."\n";
-}else{
-echo "SERVER: not configured\n";
-}
+    if (test_connection($config)) {
 
-echo "------------------------------------------------\n";
+        $GLOBALS["LAST_INFO"] = "Server ready";
 
-echo "MENU: ".$GLOBALS["CURRENT_MENU"]."\n";
-echo "ACTIVE DB: ".($GLOBALS["ACTIVE_DB"] ?? "none")."\n";
+    } else {
 
-echo "------------------------------------------------\n";
-echo "INFO: ".$GLOBALS["LAST_INFO"]."\n";
-echo "------------------------------------------------\n\n";
-
-}
-
-/* =========================
-TABLE GRID
-========================= */
-
-function render_table($rows){
-
-if(!$rows){
-echo "No data\n";
-return;
-}
-
-$headers=array_keys($rows[0]);
-
-$width=[];
-
-foreach($headers as $h){
-$width[$h]=strlen($h);
-}
-
-foreach($rows as $row){
-foreach($row as $k=>$v){
-$width[$k]=max($width[$k],strlen((string)$v));
-}
-}
-
-$line="+";
-
-foreach($width as $w){
-$line.=str_repeat("-", $w+2)."+";
-}
-
-echo $line."\n";
-
-echo "|";
-
-foreach($headers as $h){
-printf(" %-".$width[$h]."s |",$h);
-}
-
-echo "\n".$line."\n";
-
-foreach($rows as $row){
-
-echo "|";
-
-foreach($headers as $h){
-printf(" %-".$width[$h]."s |",$row[$h]);
-}
-
-echo "\n";
-}
-
-echo $line."\n";
-
-}
-
-function render_table_index($rows,$field){
-
-$i=1;
-$data=[];
-
-foreach($rows as $r){
-$data[]=["#" => $i++,$field => $r[$field]];
-}
-
-render_table($data);
-
-}
-
-/* =========================
-DATABASE
-========================= */
-
-function show_databases(){
-
-$stmt=db()->query("SHOW DATABASES");
-$rows=$stmt->fetchAll(PDO::FETCH_ASSOC);
-
-render_table_index($rows,"Database");
-
+        $GLOBALS["LAST_INFO"] = "Connection failed";
+    }
 }
 
 function select_database(){
 
-$stmt=db()->query("SHOW DATABASES");
-$rows=$stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt=db()->query("SHOW DATABASES");
+    $rows=$stmt->fetchAll(PDO::FETCH_ASSOC);
 
-render_table_index($rows,"Database");
+    render_table_index($rows,"Database");
 
-echo "[0] Back\n";
+    echo "[0] Back\n";
 
-$c=intval(readline("Select number: "));
+    $c=intval(readline("Select number: "));
 
-if($c==0) return;
+    if($c==0) return;
 
-if($c<1 || $c>count($rows)){
-set_info("Invalid selection");
-return;
+    if($c<1 || $c>count($rows)){
+        set_info("Invalid selection");
+        return;
+    }
+
+    $GLOBALS["ACTIVE_DB"]=$rows[$c-1]["Database"];
+
+    set_info("Using database ".$GLOBALS["ACTIVE_DB"]);
 }
-
-$GLOBALS["ACTIVE_DB"]=$rows[$c-1]["Database"];
-
-set_info("Using database ".$GLOBALS["ACTIVE_DB"]);
-
-}
-
-/* =========================
-TABLE
-========================= */
 
 function select_table(){
 
-$db=db_with_database();
+    $db=db_with_database();
 
-$stmt=$db->query("SHOW TABLES");
+    if(!$db) return null;
 
-$rows=[];
+    $stmt=$db->query("SHOW TABLES");
 
-while($r=$stmt->fetch(PDO::FETCH_NUM)){
-$rows[]=["Table"=>$r[0]];
-}
+    $rows=[];
 
-render_table_index($rows,"Table");
+    while($r=$stmt->fetch(PDO::FETCH_NUM)){
+        $rows[]=["Table"=>$r[0]];
+    }
 
-echo "[0] Back\n";
+    render_table_index($rows,"Table");
 
-$c=intval(readline("Select number: "));
+    echo "[0] Back\n";
 
-if($c==0) return null;
+    $c=intval(readline("Select number: "));
 
-if($c<1 || $c>count($rows)){
-set_info("Invalid selection");
-return null;
-}
+    if($c==0) return null;
 
-return $rows[$c-1]["Table"];
+    if($c<1 || $c>count($rows)){
+        set_info("Invalid selection");
+        return null;
+    }
 
+    return $rows[$c-1]["Table"];
 }
 
 function list_tables(){
 
-$db=db_with_database();
+    $db=db_with_database();
 
-$stmt=$db->query("SHOW TABLES");
+    if(!$db) return;
 
-$rows=[];
+    $stmt=$db->query("SHOW TABLES");
 
-while($r=$stmt->fetch(PDO::FETCH_NUM)){
-$rows[]=["Table"=>$r[0]];
-}
+    $rows=[];
 
-render_table_index($rows,"Table");
+    while($r=$stmt->fetch(PDO::FETCH_NUM)){
+        $rows[]=["Table"=>$r[0]];
+    }
 
+    render_table_index($rows,"Table");
 }
 
 function create_table(){
 
-$db=db_with_database();
+    $db=db_with_database();
 
-$table=readline("Table name (or 'back'): ");
+    if(!$db) return;
 
-if($table=="back") return;
+    $table=readline("Table name (or 'back'): ");
 
-$cols=[];
+    if($table=="back") return;
 
-while(true){
+    $cols=[];
 
-$name=readline("Column name (or 'done'): ");
+    while(true){
 
-if($name=="done") break;
+        $name=readline("Column name (or 'done'): ");
 
-$type=readline("Column type (example VARCHAR(100)): ");
+        if($name=="done") break;
 
-$cols[]="`$name` $type";
+        $type=readline("Column type (example VARCHAR(100)): ");
 
-}
+        $cols[]="`$name` $type";
+    }
 
-$sql="CREATE TABLE `$table`(".implode(",",$cols).")";
+    $sql="CREATE TABLE `$table`(".implode(",",$cols).")";
 
-$db->exec($sql);
+    $db->exec($sql);
 
-set_info("Table created");
-
+    set_info("Table created");
 }
 
 function alter_table(){
 
-$table=select_table();
+    $table=select_table();
 
-if(!$table) return;
+    if(!$table) return;
 
-$db=db_with_database();
+    $db=db_with_database();
 
-while(true){
+    while(true){
 
-echo "\nALTER TABLE $table\n";
+        echo "\nALTER TABLE $table\n";
 
-echo "1 Add column\n";
-echo "2 Drop column\n";
-echo "0 Back\n";
+        echo "1 Add column\n";
+        echo "2 Drop column\n";
+        echo "0 Back\n";
 
-$c=intval(readline("Select: "));
+        $c=intval(readline("Select: "));
 
-switch($c){
+        switch($c){
 
-case 1:
+        case 1:
 
-$name=readline("Column name: ");
-$type=readline("Column type: ");
+            $name=readline("Column name: ");
+            $type=readline("Column type: ");
 
-$db->exec("ALTER TABLE `$table` ADD `$name` $type");
+            $db->exec("ALTER TABLE `$table` ADD `$name` $type");
 
-set_info("Column added");
+            set_info("Column added");
 
-break;
+            break;
 
-case 2:
+        case 2:
 
-$name=readline("Column name: ");
+            $name=readline("Column name: ");
 
-$db->exec("ALTER TABLE `$table` DROP `$name`");
+            $db->exec("ALTER TABLE `$table` DROP `$name`");
 
-set_info("Column removed");
+            set_info("Column removed");
 
-break;
+            break;
 
-case 0:return;
-
-}
-
-}
-
+        case 0:return;
+        }
+    }
 }
 
 function describe_table(){
 
-$table=select_table();
+    $table=select_table();
 
-if(!$table) return;
+    if(!$table) return;
 
-$db=db_with_database();
+    $db=db_with_database();
 
-$stmt=$db->query("DESCRIBE `$table`");
+    $stmt=$db->query("DESCRIBE `$table`");
 
-$rows=$stmt->fetchAll(PDO::FETCH_ASSOC);
+    $rows=$stmt->fetchAll(PDO::FETCH_ASSOC);
 
-render_table($rows);
-
+    render_table($rows);
 }
 
 function browse_table(){
 
-$table=select_table();
+    $table=select_table();
 
-if(!$table) return;
+    if(!$table) return;
 
-$db=db_with_database();
+    $db=db_with_database();
 
-$stmt=$db->query("SELECT * FROM `$table` LIMIT 20");
+    $stmt=$db->query("SELECT * FROM `$table` LIMIT 20");
 
-$rows=$stmt->fetchAll(PDO::FETCH_ASSOC);
+    $rows=$stmt->fetchAll(PDO::FETCH_ASSOC);
 
-render_table($rows);
-
+    render_table($rows);
 }
 
 function destroy_table(){
 
-$table=select_table();
+    $table=select_table();
 
-if(!$table) return;
+    if(!$table) return;
 
-$confirm=readline("Drop table $table ? (y/n): ");
+    $confirm=readline("Drop table $table ? (y/n): ");
 
-if($confirm!="y") return;
+    if($confirm!="y") return;
 
-$db=db_with_database();
+    $db=db_with_database();
 
-$db->exec("DROP TABLE `$table`");
+    $db->exec("DROP TABLE `$table`");
 
-set_info("Table dropped");
-
+    set_info("Table dropped");
 }
 
 function insert_row(){
 
-$table=select_table();
+    $table=select_table();
 
-if(!$table) return;
+    if(!$table) return;
 
-$db=db_with_database();
+    $db=db_with_database();
 
-$stmt=$db->query("DESCRIBE `$table`");
+    $stmt=$db->query("DESCRIBE `$table`");
 
-$cols=$stmt->fetchAll(PDO::FETCH_ASSOC);
+    $cols=$stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$data=[];
+    $data=[];
 
-foreach($cols as $c){
+    foreach($cols as $c){
 
-if(strpos($c["Extra"],"auto_increment")!==false) continue;
+        if(strpos($c9["Extra"],"auto_increment")!==false) continue;
 
-$v=readline($c["Field"].": ");
+        $v=readline($c["Field"].": ");
 
-$data[$c["Field"]]=$v;
+        $data[$c["Field"]]=$v;
+    }
 
-}
+    $fields=array_keys($data);
 
-$fields=array_keys($data);
+    $sql="INSERT INTO `$table` (`".implode("`,`",$fields)."`) VALUES ('".implode("','",$data)."')";
 
-$sql="INSERT INTO `$table` (`".implode("`,`",$fields)."`) VALUES ('".implode("','",$data)."')";
+    $db->exec($sql);
 
-$db->exec($sql);
-
-set_info("Row inserted");
-
+    set_info("Row inserted");
 }
